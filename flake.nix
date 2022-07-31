@@ -55,11 +55,19 @@
               };
             };
             config = mkIf cfg.enable {
+              users.users.perlsub = {
+                group = "nogroup";
+                isSystemUser = true;
+              };
               systemd.services.perlsub = {
                 wantedBy = [ "multi-user.target" ];
-                serviceConfig.ExecStart = "${self.defaultPackage.${system}}/bin/perlsub";
-                serviceConfig.EnvironmentFile = cfg.envFile;
-                serviceConfig.Environment = concatStringsSep " " (pkgs.lib.mapAttrsToList (name: value: name + "=" + value) envVars);
+                serviceConfig = {
+                    ExecStart = "${self.defaultPackage.${system}}/bin/perlsub";
+                    EnvironmentFile = cfg.envFile;
+                    Environment = concatStringsSep " " (pkgs.lib.mapAttrsToList (name: value: name + "=" + value) envVars);
+                    User = "perlsub";
+                    Group = "nogroup";
+                };
               };
             };
           };
