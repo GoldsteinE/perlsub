@@ -75,7 +75,7 @@ async fn run_perl(
     .arg("-lp");
 
     for expr in exprs {
-        cmd.args(["-E", expr]);
+        cmd.args(["-E", &format!("{};", expr)]);
     }
 
     let mut child = cmd.spawn()?;
