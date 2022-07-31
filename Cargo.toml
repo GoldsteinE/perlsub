@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 color-eyre = "0.6.2"
 envy = "0.4.2"
-nix = { version = "0.24.2", default-features = false, features = ["process", "signal"] }
 serde = { version = "1.0.140", features = ["derive"] }
 sled = "0.34.7"
 teloxide = { version = "0.10.1", default-features = false, features = ["ctrlc_handler", "rustls"] }
