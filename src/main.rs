@@ -70,7 +70,7 @@ async fn run_perl(
     .arg(&cfg.prlimit).args(["--memlock=65535", "--rss=4194304", "--cpu=2"])
     .arg(&cfg.bwrap).args(["--unshare-all", "--proc", "/proc", "--dev", "/dev"])
                     .args(cfg.allow_dirs.iter().flat_map(|dir| ["--ro-bind".as_ref(), dir.as_os_str(), dir.as_os_str()]))
-    .arg(&cfg.prlimit).args(["--nproc=1"])
+    .arg(&cfg.prlimit).args(["--nproc=1", "--fsize=0"])
     .arg(&cfg.perl).args(["-Mutf8", "-lpe", "BEGIN { binmode STDIN, ':encoding(UTF-8)'; binmode STDOUT, ':encoding(UTF-8)'; }"]);
 
     for expr in exprs {
