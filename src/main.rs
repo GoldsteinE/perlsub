@@ -63,7 +63,7 @@ async fn run_perl(
     cmd
     .stdin(Stdio::piped())
     .stdout(Stdio::piped())
-    .stderr(Stdio::piped())
+    .stderr(Stdio::null())
     .env_clear()
     .env("LANG", "C")
     .args(["--signal", "TERM", "--kill-after", "1s", "0.5s"])
@@ -83,7 +83,7 @@ async fn run_perl(
     stdin.write_all(input.as_bytes()).await?;
     drop(stdin);
 
-    let mut buf = [0_u8; 1024];
+    let mut buf = [0_u8; 4096];
     let mut cur = buf.as_mut_slice();
     while !cur.is_empty() {
         let n = stdout.read(cur).await?;
@@ -94,15 +94,8 @@ async fn run_perl(
         cur = &mut cur[n..];
     }
 
-    let output = child.wait_with_output().await?;
-    if !output.stderr.is_empty() {
-        tracing::info!("stderr: {}", String::from_utf8_lossy(&output.stderr));
-    }
-    ensure!(
-        output.status.success(),
-        "perl exited with code {:?}",
-        output.status
-    );
+    let status = child.wait().await?;
+    ensure!(status.success(), "perl exited with code {:?}", status);
 
     Ok(String::from_utf8_lossy(&buf).into())
 }
