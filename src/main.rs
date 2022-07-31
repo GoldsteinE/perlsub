@@ -1,22 +1,11 @@
-#![allow(unused, dead_code)]
-
-use std::{
-    ffi::OsString,
-    fmt,
-    mem::{self, MaybeUninit},
-    path::{Path, PathBuf},
-    process::Stdio,
-    sync::Arc,
-};
+use std::{fmt, path::PathBuf, process::Stdio, sync::Arc};
 
 use color_eyre::eyre::{self, ensure, eyre};
-use nix::{sys::signal::Signal, unistd::Pid};
 use serde::Deserialize;
 use teloxide::{
-    dispatching::{repls::repl_with_listener, update_listeners::Polling},
     dptree,
     prelude::{Dispatcher, Request, Requester},
-    types::{AllowedUpdate, Message, Update, UpdateKind},
+    types::{Message, Update, UpdateKind},
     ApiError, Bot, RequestError,
 };
 use tokio::{
@@ -85,7 +74,7 @@ async fn run_perl(
     .arg("-lp");
 
     for expr in exprs {
-        let cmd = cmd.args(["-E", expr]);
+        cmd.args(["-E", expr]);
     }
 
     let mut child = cmd.spawn()?;
@@ -133,6 +122,7 @@ async fn do_main() -> eyre::Result<()> {
     );
     let cfg = Arc::new(cfg);
     let db = sled::open(&cfg.db_path)?;
+    let semaphore = Arc::new(Semaphore::new(cfg.max_parallel));
 
     let bot = Bot::new(&cfg.token.0);
     Dispatcher::builder(
@@ -140,6 +130,7 @@ async fn do_main() -> eyre::Result<()> {
         dptree::endpoint(move |bot: Bot, update: Update| {
             let cfg = cfg.clone();
             let db = db.clone();
+            let semaphore = semaphore.clone();
             async move {
                 let (message, edited) = match update.kind {
                     UpdateKind::Message(message) => (message, false),
@@ -152,7 +143,10 @@ async fn do_main() -> eyre::Result<()> {
                 let raw_exprs = or_ok!(message.text());
                 let mut exprs = filter_exprs(raw_exprs).peekable();
                 or_ok!(exprs.peek());
-                let res = run_perl(exprs, text, &cfg).await?;
+                let res = {
+                    let _permit = semaphore.acquire().await?;
+                    run_perl(exprs, text, &cfg).await?
+                };
                 if res.is_empty() {
                     return Ok(());
                 }
@@ -180,7 +174,7 @@ async fn do_main() -> eyre::Result<()> {
                     let mut request = bot.send_message(reply_to.chat.id, res);
                     request.reply_to_message_id = Some(reply_to.id);
                     let sent = request.send().await?;
-                    db.insert(unique_id(&message), &sent.id.to_le_bytes());
+                    db.insert(unique_id(&message), &sent.id.to_le_bytes())?;
                 }
 
                 if raw_exprs.lines().any(|line| line == ";del") {
