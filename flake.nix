@@ -1,14 +1,14 @@
 {
   inputs = {
-    nixpkgs.url      = "github:nixos/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     rust-overlay.url = "github:oxalica/rust-overlay";
-    flake-utils.url  = "github:numtide/flake-utils";
-    naersk.url       = "github:nix-community/naersk";
+    flake-utils.url = "github:numtide/flake-utils";
+    naersk.url = "github:nix-community/naersk";
   };
 
   outputs = { self, nixpkgs, rust-overlay, flake-utils, naersk }:
     flake-utils.lib.eachDefaultSystem (system:
-      let 
+      let
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs {
           inherit system overlays;
@@ -32,7 +32,8 @@
           TIMEOUT = "${coreutils}/bin/timeout";
           ALLOW_DIRS = "${perl},${util-linux},${util-linux.lib},${glibc}";
         };
-      in rec {
+      in
+      rec {
         packages.perlsub = naersk-lib.buildPackage {
           pname = "perlsub";
           root = ./.;
@@ -43,24 +44,25 @@
         defaultApp = apps.perlsub;
 
         nixosModules.default = with pkgs.lib; { config, ... }:
-        let cfg = config.services.perlsub;
-        in {
-          options.services.perlsub = {
-            enable = mkEnableOption "perlsub bot for Telegram";
-            envFile = mkOption {
-              type = types.str;
-              default = "/etc/perlsub.env";
+          let cfg = config.services.perlsub;
+          in
+          {
+            options.services.perlsub = {
+              enable = mkEnableOption "perlsub bot for Telegram";
+              envFile = mkOption {
+                type = types.str;
+                default = "/etc/perlsub.env";
+              };
+            };
+            config = mkIf cfg.enable {
+              systemd.services.perlsub = {
+                wantedBy = [ "multi-user.target" ];
+                serviceConfig.ExecStart = "${self.defaultPackage.${system}}/bin/perlsub";
+                serviceConfig.EnvironmentFile = cfg.envFile;
+                serviceConfig.Environment = concatStringsSep " " (pkgs.lib.mapAttrsToList (name: value: name + "=" + value) envVars);
+              };
             };
           };
-          config = mkIf cfg.enable {
-            systemd.services.perlsub = {
-              wantedBy = [ "multi-user.target" ];
-              serviceConfig.ExecStart = "${self.defaultPackage.${system}}/bin/perlsub";
-              serviceConfig.EnvironmentFile = cfg.envFile;
-              serviceConfig.Environment = concatStringsSep " " (pkgs.lib.mapAttrsToList (name: value: name + "=" + value) envVars);
-            };
-          };
-        };
 
         devShell = pkgs.mkShell ({
           buildInputs = [
