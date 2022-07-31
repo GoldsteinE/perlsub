@@ -67,7 +67,7 @@ async fn run_perl(
     .env_clear()
     .env("LANG", "C")
     .args(["--signal", "TERM", "--kill-after", "1s", "0.5s"])
-    .arg(&cfg.bwrap).args(["--unshare-all", "--proc", "/proc", "--dev", "/dev", "--uid", "65534", "--gid", "65534"])
+    .arg(&cfg.bwrap).args(["--unshare-all", "--proc", "/proc", "--dev", "/dev"])
                     .args(cfg.allow_dirs.iter().flat_map(|dir| ["--ro-bind".as_ref(), dir.as_os_str(), dir.as_os_str()]))
     .arg(&cfg.prlimit).args(["--memlock=4194304", "--rss=4194304", "--cpu=2", "--nproc=1"])
     .arg(&cfg.perl)
