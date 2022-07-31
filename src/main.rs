@@ -95,6 +95,9 @@ async fn run_perl(
     }
 
     let output = child.wait_with_output().await?;
+    if !output.stderr.is_empty() {
+        tracing::info!("stderr: {}", String::from_utf8_lossy(&output.stderr));
+    }
     ensure!(
         output.status.success(),
         "perl exited with code {:?}",
