@@ -5,7 +5,7 @@ use serde::Deserialize;
 use teloxide::{
     dptree,
     prelude::{Dispatcher, Request, Requester},
-    types::{Message, Update, UpdateKind},
+    types::{Message, MessageId, Update, UpdateKind},
     ApiError, Bot, RequestError,
 };
 use tokio::{
@@ -56,6 +56,7 @@ async fn run_perl(
     exprs: impl IntoIterator<Item = &str>,
     input: &str,
     cfg: &Config,
+    full: bool,
 ) -> eyre::Result<String> {
     let mut cmd = Command::new(&cfg.timeout);
 
@@ -71,12 +72,19 @@ async fn run_perl(
     .arg(&cfg.bwrap).args(["--unshare-all", "--proc", "/proc", "--dev", "/dev"])
                     .args(cfg.allow_dirs.iter().flat_map(|dir| ["--ro-bind".as_ref(), dir.as_os_str(), dir.as_os_str()]))
     .arg(&cfg.prlimit).args(["--nproc=1", "--fsize=0"])
-    .arg(&cfg.perl).args(["-Mutf8", "-lpe", "BEGIN { binmode STDIN, ':encoding(UTF-8)'; binmode STDOUT, ':encoding(UTF-8)'; }",
-                                      "-e", "@W = split;"]);
+    .arg(&cfg.perl).args(["-Mutf8", "-e", "BEGIN { binmode STDIN, ':encoding(UTF-8)'; binmode STDOUT, ':encoding(UTF-8)'; }"]);
+
+    if full {
+        cmd.args(["-e", "local $/; $_ = <>; @W = split;"]);
+    } else {
+        cmd.args(["-lne", "@W = split;"]);
+    }
 
     for expr in exprs {
         cmd.args(["-E", &format!("{};", expr)]);
     }
+
+    cmd.args(["-e", "say"]);
 
     let mut child = cmd.spawn()?;
     let mut stdin = child.stdin.take().unwrap();
@@ -107,8 +115,11 @@ fn filter_exprs(raw_exprs: &str) -> impl Iterator<Item = &str> {
         .filter(|line| matches!(line.get(..2), Some("s/" | "s(" | "s[" | "s<" | "s{")))
 }
 
-fn unique_id(message: &Message) -> [u8; 16] {
-    (((message.id as u128) << 64) | (message.chat.id.0 as u128)).to_le_bytes()
+fn unique_id(message: &Message) -> [u8; 12] {
+    let mut res = [0; 12];
+    res[..8].copy_from_slice(&message.chat.id.0.to_le_bytes());
+    res[8..].copy_from_slice(&message.id.0.to_le_bytes());
+    res
 }
 
 async fn do_main() -> eyre::Result<()> {
@@ -140,9 +151,10 @@ async fn do_main() -> eyre::Result<()> {
                 let raw_exprs = or_ok!(message.text());
                 let mut exprs = filter_exprs(raw_exprs).peekable();
                 or_ok!(exprs.peek());
+                let full = raw_exprs.lines().any(|line| line == ";full");
                 let res = {
                     let _permit = semaphore.acquire().await?;
-                    run_perl(exprs, text, &cfg).await?
+                    run_perl(exprs, text, &cfg, full).await?
                 };
                 if res.is_empty() {
                     return Ok(());
@@ -152,11 +164,11 @@ async fn do_main() -> eyre::Result<()> {
                     let original_reply_id_bytes = db
                         .get(unique_id(&message))?
                         .ok_or_else(|| eyre!("original message {} not found in db", message.id))?;
-                    let original_reply_id = i32::from_le_bytes(
+                    let original_reply_id = MessageId(i32::from_le_bytes(
                         (&*original_reply_id_bytes)
                             .try_into()
                             .map_err(|_| eyre!("wrong ID len in db"))?,
-                    );
+                    ));
 
                     if let Err(err) = bot
                         .edit_message_text(message.chat.id, original_reply_id, res)
@@ -171,7 +183,7 @@ async fn do_main() -> eyre::Result<()> {
                     let mut request = bot.send_message(reply_to.chat.id, res);
                     request.reply_to_message_id = Some(reply_to.id);
                     let sent = request.send().await?;
-                    db.insert(unique_id(&message), &sent.id.to_le_bytes())?;
+                    db.insert(unique_id(&message), &sent.id.0.to_le_bytes())?;
                 }
 
                 if raw_exprs.lines().any(|line| line == ";del") {

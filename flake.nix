@@ -30,7 +30,7 @@
           PERL = "${perl}/bin/perl";
           PRLIMIT = "${util-linux}/bin/prlimit";
           TIMEOUT = "${coreutils}/bin/timeout";
-          ALLOW_DIRS = "${perl},${util-linux},${util-linux.lib},${glibc}";
+          ALLOW_DIRS = "${perl},${util-linux},${util-linux.lib},${glibc},${libxcrypt}";
         };
       in
       rec {
