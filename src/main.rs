@@ -64,7 +64,7 @@ async fn run_perl(
     cmd
     .stdin(Stdio::piped())
     .stdout(Stdio::piped())
-    .stderr(Stdio::null())
+    .stderr(Stdio::piped())
     .env_clear()
     .env("LANG", "C")
     .args(["--signal", "TERM", "--kill-after", "1s", "0.5s"])
@@ -89,6 +89,7 @@ async fn run_perl(
     let mut child = cmd.spawn()?;
     let mut stdin = child.stdin.take().unwrap();
     let mut stdout = child.stdout.take().unwrap();
+    let mut stderr = child.stderr.take().unwrap();
     stdin.write_all(input.as_bytes()).await?;
     drop(stdin);
 
@@ -104,7 +105,19 @@ async fn run_perl(
     }
 
     let status = child.wait().await?;
-    ensure!(status.success(), "perl exited with code {:?}", status);
+    ensure!(
+        status.success(),
+        "perl exited with code {:?}; stderr {}",
+        status,
+        {
+            let mut err = Vec::new();
+            if stderr.read_to_end(&mut err).await.is_err() {
+                "failed to read".to_owned()
+            } else {
+                String::from_utf8_lossy(&err).into()
+            }
+        }
+    );
 
     Ok(String::from_utf8_lossy(&buf).into())
 }
