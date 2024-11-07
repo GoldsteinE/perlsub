@@ -147,8 +147,8 @@ async fn do_main() -> eyre::Result<()> {
                 };
 
                 let reply_to = or_ok!(message.reply_to_message());
-                let text = or_ok!(reply_to.text());
-                let raw_exprs = or_ok!(message.text());
+                let text = or_ok!(reply_to.text().or(reply_to.caption()));
+                let raw_exprs = or_ok!(message.text().or(reply_to.caption()));
                 let mut exprs = filter_exprs(raw_exprs).peekable();
                 or_ok!(exprs.peek());
                 let full = raw_exprs.lines().any(|line| line == ";full");
