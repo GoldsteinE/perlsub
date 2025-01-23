@@ -160,10 +160,13 @@ async fn do_main() -> eyre::Result<()> {
                     return Ok(());
                 }
 
-                if edited {
-                    let original_reply_id_bytes = db
-                        .get(unique_id(&message))?
-                        .ok_or_else(|| eyre!("original message {} not found in db", message.id))?;
+                // If the update is of "edit" kind, ensure that the original message is present in
+                // db, otherwise send a new message
+                // Get from db conditionally while handling errors
+                if let Some(original_reply_id_bytes) = edited.then(|| db.get(unique_id(&message)))
+                        .transpose()?
+                        .flatten()
+                {
                     let original_reply_id = MessageId(i32::from_le_bytes(
                         (&*original_reply_id_bytes)
                             .try_into()
